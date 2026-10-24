@@ -40,7 +40,7 @@ powershell -ExecutionPolicy Bypass -File tools/package.ps1
 powershell -ExecutionPolicy Bypass -File tools/test-core.ps1
 ```
 
-本地最新版 APK 保存在 `releases/LightStart-0.3.0-debug.apk`。使用与旧版相同密钥构建时，可覆盖安装并保留统计和规则。安卓安装标识沿用 `com.qingping.app`，以保留升级兼容性；用户可见名称为“轻启”。Gradle 原始输出为 `app/build/outputs/apk/debug/app-debug.apk`。
+本地最新版 APK 保存在 `releases/LightStart-0.3.1-debug.apk`。使用与旧版相同密钥构建时，可覆盖安装并保留统计和规则。安卓安装标识沿用 `com.qingping.app`，以保留升级兼容性；用户可见名称为“轻启”。Gradle 原始输出为 `app/build/outputs/apk/debug/app-debug.apk`。
 
 当前为调试签名版本。不同开发环境、不同 CI 运行的签名可能不同，不能保证相互覆盖安装。正式发布须配置稳定的私有签名密钥，详见[构建与发布](docs/构建与发布.md)。
 
