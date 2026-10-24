@@ -1,0 +1,90 @@
+name: Build Android APK
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Core policy checks
+        shell: bash
+        run: |
+          mkdir -p app/build/core-tests
+          javac -encoding UTF-8 -d app/build/core-tests app/src/main/java/com/qingping/app/SkipPolicy.java tools/PolicyChecks.java
+          java -cp app/build/core-tests com.qingping.app.PolicyChecks
+      - name: Build APK and run Lint
+        run: bash gradlew assembleDebug lintDebug --no-daemon --console plain
+      - name: Prepare verified APK
+        id: metadata
+        shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version=$(python3 -c "import re; print(re.search(r\"versionName\s+'([^']+)'\", open('app/build.gradle', encoding='utf-8').read()).group(1))")
+          if [[ "$REF_TYPE" == tag && "$REF_NAME" != "v$version" ]]; then
+            echo 'Version tag must match app/build.gradle versionName.' >&2
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/LightStart-$version-debug.apk"
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Upload APK for this commit
+        uses: actions/upload-artifact@v4
+        with:
+          name: LightStart-${{ steps.metadata.outputs.version }}-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 90
+      - name: Upload Lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-${{ github.run_id }}
+          path: app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: LightStart-${{ needs.build.outputs.version }}-${{ github.sha }}
+          path: dist
+      - name: Publish APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          APP_VERSION: ${{ needs.build.outputs.version }}
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/* --verify-tag --title "轻启 $APP_VERSION" --notes '轻启 · 开屏广告跳过助手。Android 8 及以上。此为 CI 调试签名安装包，可能与本地或其他构建签名不同；APK 和 SHA-256 校验文件见附件。'
+          fi

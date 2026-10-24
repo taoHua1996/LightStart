@@ -1,0 +1,22 @@
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+.tools/
+*.jks
+*.keystore
+*.log
+*.apk
+*.aab
+.env
+.env.*
+*.pem
+*.p12
+__pycache__/
+
+# Local artifacts and historical emulator captures are not source releases.
+releases/
+docs/screenshots/mumu-*.png
+docs/0.2*.md
+docs/验证结果.md

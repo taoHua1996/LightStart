@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#24634E</color>
+    <color name="surface">#F7F9F6</color>
+    <color name="on_surface">#19251E</color>
+    <color name="secondary">#4F6156</color>
+    <color name="outline">#D3DDD5</color>
+    <color name="tonal">#DFEDE2</color>
+</resources>
