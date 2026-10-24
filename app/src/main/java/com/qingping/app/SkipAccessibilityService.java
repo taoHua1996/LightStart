@@ -22,6 +22,7 @@ public final class SkipAccessibilityService extends AccessibilityService {
     private boolean demo;
     private long lastScan;
     private boolean scanPending;
+    private long transitionUntil;
     private final Runnable scanTask = () -> { scanPending = false; scan(); };
 
     @Override protected void onServiceConnected() {
@@ -34,16 +35,10 @@ public final class SkipAccessibilityService extends AccessibilityService {
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
         if (store == null || !store.consented() || !store.active()) { reset(); return; }
         if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            AccessibilityNodeInfo root = activeRoot();
-            if (root == null) return;
-            String pkg = string(root.getPackageName());
-            root.recycle();
-            // Ignore background events; only the actual active window can open a session.
-            if (!pkg.equals(string(event.getPackageName()))) return;
-            boolean isDemo = pkg.equals(getPackageName()) && DemoActivity.class.getName().equals(string(event.getClassName()));
-            if (pkg.equals(getPackageName()) && !isDemo) { reset(); return; }
-            demo = isDemo;
-            session.enter(pkg, SystemClock.elapsedRealtime());
+            transitionUntil = SystemClock.elapsedRealtime() + 1500;
+            if (getPackageName().equals(string(event.getPackageName()))) {
+                demo = DemoActivity.class.getName().equals(string(event.getClassName()));
+            }
         }
         schedule(Math.max(80, SkipPolicy.SCAN_INTERVAL_MS - (SystemClock.elapsedRealtime() - lastScan)));
     }
@@ -56,16 +51,30 @@ public final class SkipAccessibilityService extends AccessibilityService {
                 || (keyguard != null && keyguard.isKeyguardLocked())) { reset(); return; }
         AccessibilityNodeInfo root = activeRoot();
         if (root == null) {
-            if (session.isOpen(lastScan)) schedule(SkipPolicy.SCAN_INTERVAL_MS);
+            retryTransition();
             return;
         }
         String pkg = string(root.getPackageName());
-        if (!session.canScan(pkg, lastScan) || (!demo && (excluded.contains(pkg) || !store.enabled(pkg)))) {
-            root.recycle(); return;
+        boolean isDemo = pkg.equals(getPackageName()) && demo;
+        boolean open = session.observe(pkg, lastScan);
+        if ((pkg.equals(getPackageName()) && !isDemo) || (!isDemo && excluded.contains(pkg))) {
+            root.recycle();
+            if (pkg.equals(getPackageName())) session.reset();
+            retryTransition();
+            return;
+        }
+        if (!isDemo && !store.enabled(pkg)) {
+            report(pkg, "尚未启用，请到应用页开启该应用或使用一键启用");
+            root.recycle(); retryTransition(); return;
+        }
+        if (!open) {
+            root.recycle();
+            if (lastScan < transitionUntil) schedule(SkipPolicy.SCAN_INTERVAL_MS);
+            return;
         }
         Rect window = new Rect();
         root.getBoundsInScreen(window);
-        AccessibilityNodeInfo target = findTarget(root, pkg, window);
+        AccessibilityNodeInfo target = findTarget(root, pkg, window, isDemo);
         if (target != null) {
             // One attempt per foreground session, including rejected actions, prevents loops.
             session.attempted();
@@ -73,15 +82,25 @@ public final class SkipAccessibilityService extends AccessibilityService {
             try { accepted = target.performAction(AccessibilityNodeInfo.ACTION_CLICK); }
             catch (IllegalStateException e) { accepted = false; }
             finally { target.recycle(); }
-            store.record(pkg, accepted, demo);
+            store.record(pkg, accepted, isDemo);
+            report(pkg, accepted ? "已提交跳过点击，请确认广告是否消失" : "找到按钮，但系统拒绝了点击");
         } else if (session.canScan(pkg, SystemClock.elapsedRealtime())) {
+            report(pkg, "暂未找到符合规则的可点击按钮；默认识别仅限右上角，未向无障碍提供的按钮无法识别");
             schedule(SkipPolicy.SCAN_INTERVAL_MS);
         }
     }
 
-    private AccessibilityNodeInfo findTarget(AccessibilityNodeInfo root, String pkg, Rect window) {
-        String exactText = demo ? "" : store.text(pkg);
-        String exactId = demo ? "" : store.viewId(pkg);
+    private void retryTransition() {
+        if (lastScan < transitionUntil || session.isOpen(lastScan)) schedule(SkipPolicy.SCAN_INTERVAL_MS);
+    }
+
+    private void report(String pkg, String reason) {
+        store.scanStatus(AppCatalog.label(this, pkg) + "：" + reason);
+    }
+
+    private AccessibilityNodeInfo findTarget(AccessibilityNodeInfo root, String pkg, Rect window, boolean isDemo) {
+        String exactText = isDemo ? "" : store.text(pkg);
+        String exactId = isDemo ? "" : store.viewId(pkg);
         ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
         queue.add(root);
         int visited = 0;

@@ -29,6 +29,10 @@ final class Store extends SQLiteOpenHelper {
     boolean consented() { return prefs.getBoolean("consent", false); }
     void consent() { prefs.edit().putBoolean("consent", true).apply(); }
     boolean active() { return prefs.getBoolean("active", true); }
+    String scanStatus() { return prefs.getString("scanStatus", ""); }
+    void scanStatus(String value) {
+        if (!value.equals(scanStatus())) prefs.edit().putString("scanStatus", value).apply();
+    }
     void active(boolean value) { prefs.edit().putBoolean("active", value).apply(); }
     boolean enabled(String pkg) { return prefs.getBoolean("enabled:" + pkg, false); }
     void enable(String pkg, boolean value) { prefs.edit().putBoolean("enabled:" + pkg, value).apply(); }

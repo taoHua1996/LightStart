@@ -103,9 +103,16 @@ public final class MainActivity extends Activity {
         Button next = Ui.button(this, "正在检查…", () -> {});
         next.setEnabled(false);
         Ui.add(content, next, this, 8);
+        Ui.add(content, Ui.button(this, "测试跳过功能", this::testSkip), this, 8);
+        Ui.add(content, secondary("测试入口始终可用，无需先启用第三方应用。若条件未满足，点击后会说明原因。"), this, 4);
+        TextView scanStatus = secondary("");
+        Ui.add(content, scanStatus, this, 8);
         final int[] enabledCount = {-1};
         refreshStatus = () -> {
             String blocker = serviceBlocker();
+            setTextIfChanged(scanStatus, store.scanStatus().isEmpty()
+                    ? "尚无应用检查结果。先测试功能，再从桌面打开已启用的应用。"
+                    : "最近检查：" + store.scanStatus());
             setTextIfChanged(state, !blocker.isEmpty() ? blocker : enabledCount[0] < 0 ? "正在读取应用…"
                     : enabledCount[0] == 0 ? "还未启用应用" : "已就绪 · 等待应用开屏");
             setTextIfChanged(checklist, "无障碍：" + (!store.consented() ? "待阅读并同意说明" : !serviceEnabled() ? "待系统授权"
@@ -113,6 +120,7 @@ public final class MainActivity extends Activity {
                     + "\n自动跳过：" + (store.active() ? "总开关已开启" : "已暂停")
                     + "\n生效应用：" + (enabledCount[0] < 0 ? "正在读取" : getString(R.string.enabled_app_count, enabledCount[0])));
             next.setEnabled(true);
+            next.setVisibility(View.VISIBLE);
             if (!store.consented() || !serviceEnabled()) {
                 setTextIfChanged(next, "授权无障碍服务"); next.setOnClickListener(v -> enableService());
             } else if (!store.active()) {
@@ -124,7 +132,7 @@ public final class MainActivity extends Activity {
             } else if (enabledCount[0] == 0) {
                 setTextIfChanged(next, "去一键启用应用"); next.setOnClickListener(v -> { page = 1; render(); });
             } else {
-                setTextIfChanged(next, "测试跳过功能"); next.setOnClickListener(v -> testSkip());
+                next.setVisibility(View.GONE);
             }
         };
         refreshStatus.run();
@@ -336,7 +344,18 @@ public final class MainActivity extends Activity {
         return "";
     }
     private void testSkip() {
-        if (!serviceBlocker().isEmpty()) { render(); return; }
+        String blocker = serviceBlocker();
+        if (!blocker.isEmpty()) {
+            boolean paused = store.consented() && serviceEnabled() && !store.active();
+            new AlertDialog.Builder(this).setTitle("暂时无法自动测试")
+                    .setMessage(blocker + (paused ? "。恢复总开关后，再点击测试。"
+                            : "。请先完成无障碍设置，再返回测试。若已授权仍未连接，可在系统设置关闭后重新开启轻启服务。"))
+                    .setNegativeButton("返回", null)
+                    .setPositiveButton(paused ? "恢复自动跳过" : "前往设置", (d, w) -> {
+                        if (paused) { store.active(true); render(); } else enableService();
+                    }).show();
+            return;
+        }
         startActivity(new Intent(this, DemoActivity.class));
     }
     private void enableService() {

@@ -7,7 +7,7 @@ public final class SkipPolicy {
     public static final long WINDOW_MS = 12_000;
     public static final long SCAN_INTERVAL_MS = 350;
     private static final Pattern SKIP = Pattern.compile(
-            "(?i)^(?:跳过|skip)(?:\\s*[(（]?\\s*\\d{1,2}\\s*(?:s|秒)?\\s*[)）]?)?$|^\\d{1,2}\\s*(?:s|秒)?\\s*(?:跳过|skip)$");
+            "(?i)^(?:跳过(?:广告)?|skip(?: ad)?)(?:\\s*[(（]?\\s*\\d{1,2}\\s*(?:s|秒)?\\s*[)）]?)?$|^\\d{1,2}\\s*(?:s|秒)?\\s*(?:跳过(?:广告)?|skip(?: ad)?)$");
 
     private SkipPolicy() {}
 
@@ -42,6 +42,14 @@ public final class SkipPolicy {
 
         public boolean canScan(String current, long now) {
             return packageName.equals(current) && isOpen(now);
+        }
+
+        // Observe the actual foreground root at scan time, after any window transition.
+        // A null root is temporary and must not invent or restart a foreground session.
+        public boolean observe(String current, long now) {
+            if (current == null || current.isEmpty()) return false;
+            enter(current, now);
+            return canScan(current, now);
         }
 
         public boolean isOpen(long now) {

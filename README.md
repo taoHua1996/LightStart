@@ -28,6 +28,8 @@ Current APKs use debug signing. To upgrade an existing local test installation, 
 
 Skip counts represent click actions accepted by Android, not confirmed ad dismissals. Demo actions are excluded from third-party app totals.
 
+If nothing skips, use the always-visible test button on the Overview page first. It explains missing setup steps without requiring any third-party app to be enabled. The latest check on that page distinguishes disabled apps, unmatched buttons, and accepted or rejected click actions. A successful demo verifies the basic service path; it does not confirm compatibility with every real ad.
+
 ## Build
 
 Open this directory in Android Studio, or use the included Gradle Wrapper. Requirements: JDK 17 or later, Android SDK Platform 36, and Build Tools 36.0.0. Configure `ANDROID_HOME` or a local `local.properties` file.
