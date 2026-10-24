@@ -17,9 +17,9 @@ The current app interface is in Simplified Chinese. LightStart does not block ev
 
 - [Latest release and APKs](https://github.com/taoHua1996/LightStart/releases/latest)
 - [APK builds for each push](https://github.com/taoHua1996/LightStart/actions/workflows/android.yml)
-- [0.4.0 release notes](docs/0.4.0-release.md) and [validation results](docs/0.4.0-validation.md)
+- [0.4.1 release notes](docs/0.4.1-release.md) and [validation results](docs/0.4.1-validation.md)
 
-Current APKs use debug signing. To upgrade the locally installed 0.4.0 build, download `LightStart-0.4.0-local-debug.apk` from the release. This asset uses the same signing key as that installation. The separate `LightStart-0.4.0-debug.apk` is built by CI; CI APK signatures may differ between builds and may not support an in-place upgrade. Uninstalling the app removes its local data.
+Current APKs use debug signing. To upgrade a locally installed 0.4.0 or 0.4.1 build, download `LightStart-0.4.1-local-debug.apk` from the release. This asset uses the same signing key as those installations. The separate `LightStart-0.4.1-debug.apk` is built by CI; CI APK signatures may differ between builds and may not support an in-place upgrade. Uninstalling the app removes its local data.
 
 ## Getting started
 
@@ -32,6 +32,8 @@ Current APKs use debug signing. To upgrade the locally installed 0.4.0 build, do
 Swiping away LightStart's activity does not intentionally stop foreground protection. Android may restart a reclaimed sticky service, but force-stop, the system task manager and some OEM cleaners can still terminate it. Reopen LightStart to recover. The notification stop action disables protection persistently; boot restoration respects that choice. Pausing automatic skipping also stops protection. Accessibility authorization and binding remain controlled by Android.
 
 Automatic learning stores only app package names and qualified skip-button IDs, locally. It does not save page text or screenshots. Disable learning in Settings, or reset a learned rule from the app's optional advanced-rule dialog. Accepted clicks are not proof that an ad disappeared.
+
+Version 0.4.1 also recognizes countdown separators such as `跳过｜5` and `Skip | 5`. During the original 12-second startup window, it can handle at most two distinct verified skip-button IDs, at least one second apart. Rejected actions, missing IDs and repeated IDs do not enable a second attempt. This covers an initial splash ad followed by a startup popup without continuously clicking during normal app use. See [0.4.1 validation](docs/0.4.1-validation.md).
 
 Skip counts represent click actions accepted by Android, not confirmed ad dismissals. Demo actions are excluded from third-party app totals.
 

@@ -78,15 +78,15 @@ public final class SkipAccessibilityService extends AccessibilityService {
         candidateId = "";
         AccessibilityNodeInfo target = findTarget(root, pkg, window, isDemo);
         if (target != null) {
-            // One attempt per foreground session, including rejected actions, prevents loops.
-            session.attempted();
             boolean accepted;
             try { accepted = target.performAction(AccessibilityNodeInfo.ACTION_CLICK); }
             catch (IllegalStateException e) { accepted = false; }
             finally { target.recycle(); }
+            session.attempted(candidateId, accepted, lastScan);
             store.record(pkg, accepted, isDemo);
             if (accepted && !isDemo) store.learnId(pkg, candidateId);
             report(pkg, accepted ? "已提交跳过点击，请确认广告是否消失" : "找到按钮，但系统拒绝了点击");
+            if (session.isOpen(SystemClock.elapsedRealtime())) schedule(SkipPolicy.SCAN_INTERVAL_MS);
         } else if (session.canScan(pkg, SystemClock.elapsedRealtime())) {
             report(pkg, "暂未找到符合规则的跳过按钮；正在检查右上角和底部两角，未提供控件信息的按钮无法识别");
             schedule(SkipPolicy.SCAN_INTERVAL_MS);
@@ -147,9 +147,11 @@ public final class SkipAccessibilityService extends AccessibilityService {
         if (!pkg.equals(string(node.getPackageName())) || !node.isVisibleToUser() || !node.isEnabled()
                 || !SkipPolicy.matches(string(node.getText()), string(node.getContentDescription()),
                 node.getViewIdResourceName(), exactText, exactId, region)) return null;
+        String verifiedId = region && SkipPolicy.skipLabel(string(node.getText()), string(node.getContentDescription()))
+                && SkipPolicy.resourceId(pkg, node.getViewIdResourceName()) ? node.getViewIdResourceName() : "";
+        if (!session.canAttempt(verifiedId, lastScan)) return null;
         AccessibilityNodeInfo target = clickTarget(node, pkg, window);
-        if (target != null && region && SkipPolicy.skipLabel(string(node.getText()), string(node.getContentDescription())))
-            candidateId = string(node.getViewIdResourceName());
+        if (target != null) candidateId = verifiedId;
         return target;
     }
 

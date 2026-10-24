@@ -7,7 +7,7 @@ public final class SkipPolicy {
     public static final long WINDOW_MS = 12_000;
     public static final long SCAN_INTERVAL_MS = 350;
     private static final Pattern SKIP = Pattern.compile(
-            "(?i)^(?:跳过(?:广告)?|skip(?: ad)?)(?:\\s*[(（]?\\s*\\d{1,2}\\s*(?:s|秒)?\\s*[)）]?)?$|^\\d{1,2}\\s*(?:s|秒)?\\s*(?:跳过(?:广告)?|skip(?: ad)?)$");
+            "(?i)^(?:跳过(?:广告)?|skip(?: ad)?)(?:\\s*[|｜]?\\s*[(（]?\\s*\\d{1,2}\\s*(?:s|秒)?\\s*[)）]?)?$|^\\d{1,2}\\s*(?:s|秒)?\\s*[|｜]?\\s*(?:跳过(?:广告)?|skip(?: ad)?)$");
 
     private SkipPolicy() {}
 
@@ -45,12 +45,16 @@ public final class SkipPolicy {
         private String packageName = "";
         private long startedAt;
         private boolean attempted;
+        private String firstAcceptedId = "";
+        private long nextAttemptAt;
 
         public void enter(String next, long now) {
             if (!next.equals(packageName)) {
                 packageName = next;
                 startedAt = now;
                 attempted = false;
+                firstAcceptedId = "";
+                nextAttemptAt = now;
             }
         }
 
@@ -71,6 +75,22 @@ public final class SkipPolicy {
         }
 
         public void attempted() { attempted = true; }
+        // A second startup ad is allowed only for a different verified skip-button ID.
+        // Missing IDs and rejected clicks retain the original single-attempt behavior.
+        public boolean canAttempt(String verifiedId, long now) {
+            return isOpen(now) && now >= nextAttemptAt
+                    && (firstAcceptedId.isEmpty() || (verifiedId != null && !verifiedId.isEmpty()
+                    && !firstAcceptedId.equals(verifiedId)));
+        }
+        public void attempted(String verifiedId, boolean accepted, long now) {
+            if (!canAttempt(verifiedId, now)) return;
+            if (!firstAcceptedId.isEmpty() || !accepted || verifiedId == null || verifiedId.isEmpty()) {
+                attempted = true;
+            } else {
+                firstAcceptedId = verifiedId;
+                nextAttemptAt = now + 1000;
+            }
+        }
         public void reset() { packageName = ""; attempted = true; }
     }
 }

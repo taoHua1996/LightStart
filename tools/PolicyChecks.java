@@ -5,10 +5,12 @@ public final class PolicyChecks {
     private static int passed;
     public static void main(String[] args) {
         for (String value : new String[]{"跳过", "跳过 5s", "跳过（5秒）", "Skip", "SKIP (3)", "5秒 跳过", "  跳过  ",
-                "跳过广告", "跳过广告 5秒", "Skip ad", "SKIP AD (3)", "5秒 跳过广告"}) {
+                "跳过广告", "跳过广告 5秒", "Skip ad", "SKIP AD (3)", "5秒 跳过广告",
+                "跳过｜5", "跳过 | 1", "跳过广告｜3秒", "Skip | 5s", "5｜跳过", "3s | Skip"}) {
             check(SkipPolicy.matches(value, "", "", "", "", true), "accept exact skip: " + value);
         }
-        for (String value : new String[]{"跳过教程", "不要跳过", "点击跳过并下载", "立即体验", "关闭", "跳过广告并下载", "Skip tutorial", "", "跳过999秒", "Skip ad and install"}) {
+        for (String value : new String[]{"跳过教程", "不要跳过", "点击跳过并下载", "立即体验", "关闭", "跳过广告并下载", "Skip tutorial", "", "跳过999秒", "Skip ad and install",
+                "跳过｜下载", "跳过｜5｜安装", "跳过||5", "跳过｜", "5｜跳过并下载"}) {
             check(!SkipPolicy.matches(value, "", "", "", "", true), "reject ambiguous text: " + value);
         }
         check(!SkipPolicy.matches("跳过", "", "", "", "", false), "default requires upper right");
@@ -73,6 +75,27 @@ public final class PolicyChecks {
         delayed.attempted();
         check(!delayed.observe("target.app", 14501), "content after click cannot retry");
         check(!delayed.observe("target.app", 15000), "same-app transitions cannot duplicate click");
+        SkipPolicy.Session chained = new SkipPolicy.Session();
+        chained.enter("ad.app", 100);
+        check(chained.canAttempt("ad.app:id/splash", 100), "first verified button allowed");
+        chained.attempted("ad.app:id/splash", true, 100);
+        check(!chained.canAttempt("ad.app:id/popup", 1099), "second ad respects cooldown");
+        check(!chained.canAttempt("ad.app:id/splash", 1100), "same button cannot be retried");
+        check(!chained.canAttempt("", 1100), "second button needs verified resource ID");
+        check(!chained.canAttempt(null, 1100), "null ID cannot bypass second-button check");
+        check(chained.canAttempt("ad.app:id/popup", 1100), "distinct second startup ad allowed");
+        chained.attempted("ad.app:id/popup", true, 1100);
+        check(!chained.canAttempt("ad.app:id/third", 2200), "two-attempt hard limit");
+        chained.enter("next.app", 3000);
+        check(chained.canAttempt("", 3000), "new app resets chain");
+        chained.attempted("next.app:id/skip", false, 3000);
+        check(!chained.canAttempt("next.app:id/other", 4100), "rejected action stops chain");
+        chained.enter("missing.id", 5000);
+        chained.attempted("", true, 5000);
+        check(!chained.canAttempt("missing.id:id/skip", 6100), "missing first ID stops chain");
+        chained.enter("late.app", 10000);
+        chained.attempted("late.app:id/skip", true, 10000);
+        check(!chained.canAttempt("late.app:id/popup", 22000), "second ad cannot extend launch window");
         System.out.println("PASS: " + passed + " policy assertions");
     }
     private static void check(boolean result, String message) {
