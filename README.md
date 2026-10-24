@@ -7,6 +7,8 @@ LightStart is an offline Android utility that uses an Accessibility Service to t
 - Android 8.0 (API 26) or later.
 - No Internet permission, root, VPN, or overlay required.
 - Enable supported apps in one step; customize rules only when needed.
+- Automatically learn skip-button resource IDs after an accepted click. Missing IDs fall back to text matching.
+- Optional foreground protection with a persistent notification, a stop action, and opt-in restoration after boot.
 - Settings and statistics stay on your device.
 
 The current app interface is in Simplified Chinese. LightStart does not block every ad or prevent every ad-triggered redirect. Results depend on the app, device, and system background restrictions.
@@ -15,16 +17,21 @@ The current app interface is in Simplified Chinese. LightStart does not block ev
 
 - [Latest release and APKs](https://github.com/taoHua1996/LightStart/releases/latest)
 - [APK builds for each push](https://github.com/taoHua1996/LightStart/actions/workflows/android.yml)
+- [0.4.0 release notes](docs/0.4.0-release.md) and [validation results](docs/0.4.0-validation.md)
 
-Current APKs use debug signing. To upgrade an existing local test installation, use the `local-debug.apk` release asset signed with the same key. CI APK signatures may differ between builds and may not support an in-place upgrade. Uninstalling the app removes its local data.
+Current APKs use debug signing. To upgrade the locally installed 0.4.0 build, download `LightStart-0.4.0-local-debug.apk` from the release. This asset uses the same signing key as that installation. The separate `LightStart-0.4.0-debug.apk` is built by CI; CI APK signatures may differ between builds and may not support an in-place upgrade. Uninstalling the app removes its local data.
 
 ## Getting started
 
 1. Install the APK and open LightStart.
 2. Follow the in-app guide to enable its Accessibility Service in Android settings. Some devices require allowing restricted settings for sideloaded apps first.
 3. Turn on automatic skipping and enable the apps you want to use it with. The bulk-enable action applies the default rules without configuring each app separately.
-4. Run the built-in demo to check the service, then try your selected apps. If an app is not supported by the defaults, add a precise text or resource-ID rule. Disable the app if a rule taps the wrong control.
-5. Adjust battery or autostart settings if your device stops the service in the background. These settings cannot guarantee uninterrupted operation.
+4. Run the built-in demo, then open your selected apps. Automatic detection covers exact skip labels in the upper-right and lower corners during the first 12 seconds. Learned IDs accelerate lookup; the current label, position, visibility and button size are still checked. Manual rules take precedence.
+5. Open **Settings** to enable background protection and, optionally, restoration after boot. Allow notifications and review the linked battery and system autostart settings. OEM autostart permission cannot be read reliably and is never shown as granted merely because its settings page was opened.
+
+Swiping away LightStart's activity does not intentionally stop foreground protection. Android may restart a reclaimed sticky service, but force-stop, the system task manager and some OEM cleaners can still terminate it. Reopen LightStart to recover. The notification stop action disables protection persistently; boot restoration respects that choice. Pausing automatic skipping also stops protection. Accessibility authorization and binding remain controlled by Android.
+
+Automatic learning stores only app package names and qualified skip-button IDs, locally. It does not save page text or screenshots. Disable learning in Settings, or reset a learned rule from the app's optional advanced-rule dialog. Accepted clicks are not proof that an ad disappeared.
 
 Skip counts represent click actions accepted by Android, not confirmed ad dismissals. Demo actions are excluded from third-party app totals.
 

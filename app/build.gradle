@@ -8,9 +8,9 @@ android {
         applicationId 'com.qingping.app'
         minSdk 26
         targetSdk 36
-        versionCode 7
-        versionName '0.3.2'
-        testInstrumentationRunner 'com.qingping.app.SmokeInstrumentation'
+        versionCode 8
+        versionName '0.4.0'
+        testInstrumentationRunner 'com.qingping.app.FeatureInstrumentation'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

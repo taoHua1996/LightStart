@@ -4,5 +4,5 @@
     <string name="apps_enabled_summary">已启用 %1$d / %2$d 个应用%3$s</string>
     <string name="enabled_app_count">已启用 %1$d 个</string>
     <string name="service_label">轻启 · 开屏跳过</string>
-    <string name="service_description">轻启需要读取当前窗口的控件文字、标识和位置，以便在你开启的应用进入前台后的 12 秒内，识别并点击跳过按钮。读取内容仅在本机临时处理，不保存页面文字、不联网；仅保存应用包名、操作时间和点击结果。它不能拦截所有广告或保证阻止跳转。你可随时在轻启中暂停，或在此关闭服务。</string>
+    <string name="service_description">轻启读取当前窗口的控件文字、标识和位置，在已启用应用进入前台后的 12 秒内识别并点击跳过按钮。内容仅在本机处理，不保存页面文字、不联网；保存应用包名、已识别的跳过按钮 ID、操作时间和点击结果。自动获取 ID 可在设置中关闭。它不能拦截所有广告或保证阻止跳转。你可随时在轻启中暂停，或在此关闭服务。</string>
 </resources>

@@ -12,6 +12,20 @@ public final class PolicyChecks {
             check(!SkipPolicy.matches(value, "", "", "", "", true), "reject ambiguous text: " + value);
         }
         check(!SkipPolicy.matches("跳过", "", "", "", "", false), "default requires upper right");
+        check(SkipPolicy.skipRegion(.9f, .1f), "upper right skip region");
+        check(SkipPolicy.skipRegion(.92f, .92f), "native lower-right skip button");
+        check(SkipPolicy.skipRegion(.1f, .9f), "lower-left countdown skip button");
+        check(!SkipPolicy.skipRegion(.5f, .9f), "bottom-center content is not an automatic target");
+        check(!SkipPolicy.skipRegion(.1f, .1f), "upper-left navigation excluded");
+        check(!SkipPolicy.skipRegion(.9f, .5f), "mid-page actions excluded");
+        check(!SkipPolicy.skipRegion(1.1f, .9f), "off-window region rejected");
+        check(!SkipPolicy.skipRegion(Float.NaN, .9f), "invalid geometry rejected");
+        check(SkipPolicy.skipLabel("跳过 3", ""), "countdown label can be learned");
+        check(!SkipPolicy.skipLabel("支付", ""), "reused ID with payment label is not trusted");
+        check(SkipPolicy.resourceId("com.realtech.xiaocan", "com.realtech.xiaocan:id/tv_skip"), "real resource ID can be learned");
+        check(!SkipPolicy.resourceId("sample.app", "foreign.app:id/skip"), "foreign resource ID never learned");
+        check(!SkipPolicy.resourceId("sample.app", "sample.app:id/"), "empty resource name rejected");
+        check(!SkipPolicy.resourceId("sample.app", null), "missing resource ID leaves text recognition available");
         check(SkipPolicy.matches(null, "跳过", null, "", "", true), "content description supported");
         check(!SkipPolicy.matches(null, null, null, null, null, true), "null nodes safe");
         check(SkipPolicy.matches("跳过广告", "", "", "跳过广告", "", false), "exact custom text");

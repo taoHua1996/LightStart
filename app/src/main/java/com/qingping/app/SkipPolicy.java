@@ -11,6 +11,20 @@ public final class SkipPolicy {
 
     private SkipPolicy() {}
 
+    public static boolean skipLabel(String text, String description) {
+        return SKIP.matcher(clean(text)).matches() || SKIP.matcher(clean(description)).matches();
+    }
+
+    public static boolean skipRegion(float x, float y) {
+        return x >= 0 && x <= 1 && y >= 0 && y <= 1
+                && ((x >= .5f && y <= .4f) || (y >= .75f && (x <= .3f || x >= .7f)));
+    }
+
+    public static boolean resourceId(String pkg, String id) {
+        return pkg != null && id != null && id.startsWith(pkg + ":id/")
+                && id.substring((pkg + ":id/").length()).matches("[A-Za-z0-9_]+");
+    }
+
     public static boolean matches(String text, String description, String viewId,
                                   String exactText, String exactId, boolean upperRight) {
         // Custom constraints are conjunctive. An ID rule never falls back to generic text.

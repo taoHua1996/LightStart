@@ -89,5 +89,5 @@ jobs:
           if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" dist/* --clobber
           else
-            gh release create "$RELEASE_TAG" dist/* --verify-tag --title "轻启 $APP_VERSION" --notes '轻启 · 开屏广告跳过助手。Android 8 及以上。此为 CI 调试签名安装包，可能与本地或其他构建签名不同；APK 和 SHA-256 校验文件见附件。'
+            gh release create "$RELEASE_TAG" dist/* --verify-tag --title "LightStart $APP_VERSION" --notes 'Offline splash-ad skipping for Android 8.0 or later. Assets include a CI debug-signed APK and SHA-256 checksums. Its signing key may differ from local installations and previous builds. See the repository documentation for setup, changes and validation limits.'
           fi

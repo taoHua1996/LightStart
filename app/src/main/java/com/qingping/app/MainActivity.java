@@ -7,6 +7,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -48,7 +49,7 @@ public final class MainActivity extends Activity {
         store = new Store(this);
         if (state != null) { page = state.getInt("page", 0); appQuery = state.getString("appQuery", ""); }
     }
-    @Override protected void onResume() { super.onResume(); render(); uiHandler.post(statusTick); }
+    @Override protected void onResume() { super.onResume(); ProtectionService.sync(this); render(); uiHandler.post(statusTick); }
     @Override protected void onPause() { uiHandler.removeCallbacks(statusTick); super.onPause(); }
     @Override protected void onSaveInstanceState(Bundle out) { out.putInt("page", page); out.putString("appQuery", appQuery); super.onSaveInstanceState(out); }
     @Override protected void onDestroy() { generation++; worker.shutdownNow(); store.close(); super.onDestroy(); }
@@ -66,7 +67,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout tabs = new LinearLayout(this);
         tabs.setPadding(dp(16), 0, dp(16), dp(8));
-        String[] labels = {"概览", "应用", "记录"};
+        String[] labels = {"概览", "应用", "记录", "设置"};
         for (int i = 0; i < labels.length; i++) {
             final int index = i;
             Button tab = Ui.button(this, labels[i], () -> { page = index; render(); });
@@ -88,7 +89,7 @@ public final class MainActivity extends Activity {
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
         Ui.insets(this, root);
-        if (page == 0) overview(); else if (page == 1) apps(); else history();
+        if (page == 0) overview(); else if (page == 1) apps(); else if (page == 2) history(); else settings();
     }
 
     private void overview() {
@@ -124,7 +125,7 @@ public final class MainActivity extends Activity {
             if (!store.consented() || !serviceEnabled()) {
                 setTextIfChanged(next, "授权无障碍服务"); next.setOnClickListener(v -> enableService());
             } else if (!store.active()) {
-                setTextIfChanged(next, "恢复自动跳过"); next.setOnClickListener(v -> { store.active(true); render(); });
+                setTextIfChanged(next, "恢复自动跳过"); next.setOnClickListener(v -> { store.active(true); ProtectionService.sync(this); render(); });
             } else if (!SkipAccessibilityService.connected) {
                 setTextIfChanged(next, "检查无障碍连接"); next.setOnClickListener(v -> enableService());
             } else if (enabledCount[0] < 0) {
@@ -150,25 +151,91 @@ public final class MainActivity extends Activity {
         active.setTextSize(16);
         active.setMinHeight(dp(56));
         active.setChecked(store.active());
-        active.setOnCheckedChangeListener((button, checked) -> { store.active(checked); render(); });
+        active.setOnCheckedChangeListener((button, checked) -> { store.active(checked); ProtectionService.sync(this); render(); });
         Ui.add(content, active, this, 12);
         Ui.add(content, Ui.button(this, enabled ? "检查无障碍设置" : "开启无障碍服务", this::enableService), this, 8);
         Ui.add(content, Ui.button(this, "管理生效应用", () -> { page = 1; render(); }), this, 8);
+        Ui.add(content, Ui.button(this, "自动识别与后台设置", () -> { page = 3; render(); }), this, 8);
 
         section("本机统计");
         Ui.add(content, Ui.text(this, "今日 " + store.today() + " 次  ·  累计 " + store.total() + " 次", 20, true), this, 8);
         Ui.add(content, secondary("计入系统已接受的跳过点击，不代表已确认广告消失；演示不计入统计。"), this, 8);
         Ui.add(content, secondary("已就绪表示运行条件满足，不保证每个广告都能识别；不支持全面拦截广告或摇一摇跳转。"), this, 8);
 
-        section("重启与后台运行");
-        PowerManager power = getSystemService(PowerManager.class);
-        boolean unrestricted = power != null && power.isIgnoringBatteryOptimizations(getPackageName());
-        Ui.add(content, secondary("电池优化：" + (unrestricted ? "已豁免" : "仍受系统管理") + "\n这些设置用于改善后台运行，不是逐应用规则配置。可在安卓系统设置中搜索“自启动”“后台运行”或“电池优化”，找到轻启后按需调整；不同手机的入口和可用选项可能不同。重启后请回到此页确认状态。"), this, 8);
-        Ui.add(content, Ui.button(this, "打开电池优化设置", () -> open(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))), this, 8);
-        Ui.add(content, Ui.button(this, "打开轻启应用设置", () -> open(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())))), this, 8);
-        Ui.add(content, secondary("强行停止、撤销权限或厂商清理可能使服务失效。轻启不能自行重新授权或保证永久驻留。"), this, 8);
-        if (store.bootAt() != 0) Ui.add(content, secondary("最近收到开机通知：" + date(store.bootAt()) + "\n收到通知不等于无障碍服务已连接。"), this, 8);
+    }
+
+    private void settings() {
+        Ui.add(content, Ui.text(this, "自动识别与后台运行", 22, true), this, 8);
+        Switch ids = settingSwitch("自动获取跳过按钮 ID", store.autoIds());
+        ids.setOnCheckedChangeListener((v, checked) -> store.autoIds(checked));
+        Ui.add(content, ids, this, 12);
+        Ui.add(content, secondary("默认开启。识别右上角或底部两角的完整跳过文字，点击被接受后记住按钮 ID。无需逐个填写；没有 ID 时继续使用文字识别。手动规则优先。"), this, 4);
+
+        section("后台保护");
+        Switch protection = settingSwitch("开启后台保护", store.protection());
+        protection.setOnCheckedChangeListener((v, checked) -> {
+            store.protection(checked);
+            if (checked && Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 41);
+            ProtectionService.sync(this);
+            refreshStatus.run();
+        });
+        Ui.add(content, protection, this, 8);
+        Ui.add(content, secondary("显示常驻通知，减少后台被回收的机会。划掉轻启界面不会主动关闭保护；你可以在这里或通知中关闭。"), this, 4);
+        Switch boot = settingSwitch("开机恢复后台保护", store.autoStart());
+        boot.setOnCheckedChangeListener((v, checked) -> store.autoStart(checked));
+        Ui.add(content, boot, this, 8);
+        Ui.add(content, secondary("需要同时开启后台保护和自动跳过，并保留无障碍授权。系统自启动权限仍需在下方设置页允许。"), this, 4);
+        TextView status = secondary("");
+        Ui.add(content, status, this, 12);
+        refreshStatus = () -> {
+            PowerManager power = getSystemService(PowerManager.class);
+            boolean battery = power != null && power.isIgnoringBatteryOptimizations(getPackageName());
+            boolean notifications = getSystemService(android.app.NotificationManager.class).areNotificationsEnabled();
+            String guard = !store.protection() ? "已关闭" : ProtectionService.running ? "运行中"
+                    : !store.consented() || !serviceEnabled() ? "等待无障碍授权"
+                    : !store.active() ? "随自动跳过暂停" : "未运行，请点击恢复";
+            if (protection.isChecked() != store.protection()) protection.setChecked(store.protection());
+            setTextIfChanged(status, "后台保护：" + guard + "\n无障碍连接：" + (SkipAccessibilityService.connected ? "已连接" : "未连接")
+                    + "\n电池限制：" + (battery ? "已豁免" : "待允许")
+                    + "\n通知：" + (notifications ? "已允许" : "未允许，状态通知可能隐藏")
+                    + "\n系统自启动权限：需在系统设置确认"
+                    + (store.protectionStatus().isEmpty() ? "" : "\n" + store.protectionStatus()));
+        };
+        refreshStatus.run();
+        Ui.add(content, Ui.button(this, "恢复后台保护", () -> {
+            if (!store.protection()) protection.setChecked(true);
+            if (!store.consented() || !serviceEnabled()) enableService();
+            else if (!store.active()) new AlertDialog.Builder(this).setTitle("自动跳过已暂停")
+                    .setMessage("请在概览恢复自动跳过后，再启动后台保护。")
+                    .setPositiveButton("前往概览", (d, w) -> { page = 0; render(); }).setNegativeButton("返回", null).show();
+            else ProtectionService.sync(this);
+        }), this, 8);
+        Ui.add(content, Ui.button(this, "设置系统自启动", () -> {
+            if (!BackgroundSettings.openAutostart(this)) new AlertDialog.Builder(this).setTitle("在系统中允许自启动")
+                    .setMessage("此系统未提供可直接打开的自启动页面。请进入轻启应用信息，查找自启动或后台运行；也可以在系统设置中搜索这两个名称。")
+                    .setPositiveButton("打开应用信息", (d, w) -> open(BackgroundSettings.appDetails(this)))
+                    .setNegativeButton("返回", null).show();
+        }), this, 8);
+        Ui.add(content, Ui.button(this, "允许不受电池优化限制", () -> {
+            PowerManager power = getSystemService(PowerManager.class);
+            if (power != null && power.isIgnoringBatteryOptimizations(getPackageName()))
+                open(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+            else open(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())));
+        }), this, 8);
+        Ui.add(content, Ui.button(this, "通知设置", () -> open(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()))), this, 8);
+        Ui.add(content, Ui.button(this, "后台运行与应用信息", () -> open(BackgroundSettings.appDetails(this))), this, 8);
+        Ui.add(content, secondary("系统强行停止、系统任务管理器停止或部分厂商一键清理仍可终止保护。此时需重新打开轻启；普通应用无法保证永不被杀。部分系统还需在最近任务中锁定轻启。"), this, 12);
+        if (store.bootAt() != 0) Ui.add(content, secondary("最近收到开机通知：" + date(store.bootAt()) + "\n开机通知不等于无障碍已连接，请以上方实际状态为准。"), this, 8);
         Ui.add(content, Ui.button(this, "权限与隐私说明", this::privacy), this, 16);
+    }
+
+    private Switch settingSwitch(String title, boolean checked) {
+        Switch view = new Switch(this);
+        view.setText(title); view.setTextSize(16); view.setMinHeight(dp(56)); view.setChecked(checked);
+        return view;
     }
 
     private void apps() {
@@ -260,14 +327,16 @@ public final class MainActivity extends Activity {
     }
 
     private String ruleSummary(String pkg) {
-        return store.text(pkg).isEmpty() && store.viewId(pkg).isEmpty()
-                ? "默认识别 · 无需填写规则" : "自定义规则 · 默认识别已替换";
+        if (!store.text(pkg).isEmpty() || !store.viewId(pkg).isEmpty()) return "手动规则 · 优先使用";
+        if (!store.autoIds()) return "文字自动识别 · 自动获取 ID 已关闭";
+        return store.learnedId(pkg).isEmpty() ? "自动识别 · 打开应用后获取跳过按钮 ID"
+                : "已自动获取 ID：" + store.learnedId(pkg);
     }
 
     private void editRule(AppCatalog.Entry entry, Runnable changed) {
         LinearLayout form = Ui.column(this);
         form.setPadding(dp(24), dp(8), dp(24), dp(8));
-        Ui.add(form, secondary("留空使用保守规则：屏幕右上区域的“跳过 / Skip / 跳过 5s”等按钮。自定义只匹配当前应用；填写两项时必须同时满足。"), this, 0);
+        Ui.add(form, secondary("留空即可自动识别右上角和底部两角的跳过按钮，并自动记住 ID。手动填写两项时必须同时满足。"), this, 0);
         Ui.add(form, Ui.text(this, "按钮完整文字（可选）", 16, true), this, 16);
         EditText text = new EditText(this);
         text.setSingleLine(true);
@@ -280,11 +349,14 @@ public final class MainActivity extends Activity {
         id.setHint(entry.pkg() + ":id/skip");
         id.setText(store.viewId(entry.pkg()));
         Ui.add(form, id, this, 4);
-        Ui.add(form, secondary("不要填写“确定”“支付”“允许”等通用按钮。自定义规则取消右上位置限制，仍限制按钮面积与开屏时间。"), this, 12);
+        String learned = store.learnedId(entry.pkg());
+        Ui.add(form, secondary(learned.isEmpty() ? "尚未自动获取 ID。保持自动获取开启，再打开此应用的开屏广告。" : "自动获取的 ID：" + learned), this, 8);
+        if (!learned.isEmpty()) Ui.add(form, Ui.button(this, "填入已获取的 ID", () -> id.setText(learned)), this, 8);
+        Ui.add(form, secondary("不要填写“确定”“支付”“允许”等通用按钮。手动规则取消角落位置限制，仍限制按钮面积与开屏时间。"), this, 12);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(form);
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle(entry.label() + " · 规则").setView(scroll)
-                .setNegativeButton("取消", null).setNeutralButton("恢复默认", (d, which) -> { store.rule(entry.pkg(), "", ""); changed.run(); })
+                .setNegativeButton("取消", null).setNeutralButton("重新自动识别", (d, which) -> { store.rule(entry.pkg(), "", ""); store.forgetId(entry.pkg()); store.autoIds(true); changed.run(); })
                 .setPositiveButton("保存", null).create();
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
             String t = text.getText().toString().trim();
@@ -352,7 +424,7 @@ public final class MainActivity extends Activity {
                             : "。请先完成无障碍设置，再返回测试。若已授权仍未连接，可在系统设置关闭后重新开启轻启服务。"))
                     .setNegativeButton("返回", null)
                     .setPositiveButton(paused ? "恢复自动跳过" : "前往设置", (d, w) -> {
-                        if (paused) { store.active(true); render(); } else enableService();
+                        if (paused) { store.active(true); ProtectionService.sync(this); render(); } else enableService();
                     }).show();
             return;
         }
@@ -368,7 +440,7 @@ public final class MainActivity extends Activity {
     }
     private void privacy() {
         new AlertDialog.Builder(this).setTitle("权限与隐私")
-                .setMessage("无障碍：读取窗口控件并点击匹配的跳过按钮，只在本机处理，不保存页面文字。\n\n应用列表：仅查询可启动应用，用于开关与名称展示。\n\n开机通知：仅记录重启时间，不能强行拉起无障碍。\n\n不申请网络、悬浮窗、通讯录、通知或全部应用可见性权限。统计存于本机，备份关闭；卸载或清除数据会删除全部配置和记录。\n\n暂停可立即停止后续扫描；彻底撤销访问请在系统无障碍设置中关闭轻启。")
+                .setMessage("无障碍：读取窗口控件并点击匹配的跳过按钮，只在本机处理，不保存页面文字。自动获取只保存应用包名与跳过按钮 ID，可在规则页重新识别。\n\n后台保护：经你开启后显示常驻通知；可在设置页或通知中关闭。开机恢复为可选开关，由系统决定是否允许启动。电池优化豁免需要系统确认。\n\n应用列表：仅查询可启动应用。不申请网络、悬浮窗、通讯录或全部应用可见性权限。配置、ID 和统计存于本机，卸载或清除数据会删除。\n\n暂停会停止扫描和后台保护；彻底撤销访问请在系统无障碍设置中关闭轻启。")
                 .setPositiveButton("知道了", null).show();
     }
     private void open(Intent intent) {

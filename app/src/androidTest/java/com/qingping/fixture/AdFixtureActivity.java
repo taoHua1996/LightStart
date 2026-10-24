@@ -15,12 +15,18 @@ public final class AdFixtureActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(40, 40, 40, 40);
         Button skip = new Button(this);
+        int skipId = getResources().getIdentifier("fixture_skip", "id", getPackageName());
+        skip.setId(skipId);
         String skipText = getIntent().getStringExtra("skipText");
         skip.setText(skipText == null ? "跳过 5s" : skipText);
         LinearLayout.LayoutParams position = new LinearLayout.LayoutParams(-2, -2);
         position.gravity = Gravity.END;
         int delayMs = Math.max(0, Math.min(3000, getIntent().getIntExtra("delayMs", 0)));
-        if (delayMs == 0) root.addView(skip, position);
+        boolean bottom = getIntent().getBooleanExtra("bottom", false);
+        if (bottom) {
+            root.addView(new android.view.View(this), new LinearLayout.LayoutParams(1, 0, 1));
+            root.addView(skip, position);
+        } else if (delayMs == 0) root.addView(skip, position);
         else root.postDelayed(() -> root.addView(skip, 0, position), delayMs);
         TextView status = new TextView(this);
         status.setTextSize(24);

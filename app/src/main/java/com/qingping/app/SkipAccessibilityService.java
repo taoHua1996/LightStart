@@ -23,6 +23,7 @@ public final class SkipAccessibilityService extends AccessibilityService {
     private long lastScan;
     private boolean scanPending;
     private long transitionUntil;
+    private String candidateId = "";
     private final Runnable scanTask = () -> { scanPending = false; scan(); };
 
     @Override protected void onServiceConnected() {
@@ -74,6 +75,7 @@ public final class SkipAccessibilityService extends AccessibilityService {
         }
         Rect window = new Rect();
         root.getBoundsInScreen(window);
+        candidateId = "";
         AccessibilityNodeInfo target = findTarget(root, pkg, window, isDemo);
         if (target != null) {
             // One attempt per foreground session, including rejected actions, prevents loops.
@@ -83,9 +85,10 @@ public final class SkipAccessibilityService extends AccessibilityService {
             catch (IllegalStateException e) { accepted = false; }
             finally { target.recycle(); }
             store.record(pkg, accepted, isDemo);
+            if (accepted && !isDemo) store.learnId(pkg, candidateId);
             report(pkg, accepted ? "已提交跳过点击，请确认广告是否消失" : "找到按钮，但系统拒绝了点击");
         } else if (session.canScan(pkg, SystemClock.elapsedRealtime())) {
-            report(pkg, "暂未找到符合规则的可点击按钮；默认识别仅限右上角，未向无障碍提供的按钮无法识别");
+            report(pkg, "暂未找到符合规则的跳过按钮；正在检查右上角和底部两角，未提供控件信息的按钮无法识别");
             schedule(SkipPolicy.SCAN_INTERVAL_MS);
         }
     }
@@ -101,6 +104,18 @@ public final class SkipAccessibilityService extends AccessibilityService {
     private AccessibilityNodeInfo findTarget(AccessibilityNodeInfo root, String pkg, Rect window, boolean isDemo) {
         String exactText = isDemo ? "" : store.text(pkg);
         String exactId = isDemo ? "" : store.viewId(pkg);
+        // Resource-ID lookup avoids walking a large page tree. A learned ID must still
+        // have an exact skip label and a safe position; recycled IDs are not trusted.
+        String lookupId = !exactId.isEmpty() ? exactId : !isDemo && store.autoIds() ? store.learnedId(pkg) : "";
+        if (!lookupId.isEmpty()) {
+            java.util.List<AccessibilityNodeInfo> nodes = root.findAccessibilityNodeInfosByViewId(lookupId);
+            AccessibilityNodeInfo fast = null;
+            for (AccessibilityNodeInfo node : nodes) {
+                try { if (fast == null) fast = matchTarget(node, pkg, window, exactText, exactId); }
+                finally { node.recycle(); }
+            }
+            if (fast != null) { root.recycle(); return fast; }
+        }
         ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
         queue.add(root);
         int visited = 0;
@@ -110,16 +125,8 @@ public final class SkipAccessibilityService extends AccessibilityService {
                 AccessibilityNodeInfo node = queue.removeFirst();
                 try {
                     if (!pkg.equals(string(node.getPackageName()))) continue;
-                    Rect bounds = new Rect();
-                    node.getBoundsInScreen(bounds);
-                    boolean upperRight = bounds.centerX() >= window.left + window.width() * .5f
-                            && bounds.centerY() <= window.top + window.height() * .4f;
-                    if (node.isVisibleToUser() && node.isEnabled()
-                            && SkipPolicy.matches(string(node.getText()), string(node.getContentDescription()),
-                            node.getViewIdResourceName(), exactText, exactId, upperRight)) {
-                        found = clickTarget(node, pkg, window);
-                        if (found != null) break;
-                    }
+                    found = matchTarget(node, pkg, window, exactText, exactId);
+                    if (found != null) break;
                     for (int i = 0; i < node.getChildCount() && queue.size() < 250; i++) {
                         AccessibilityNodeInfo child = node.getChild(i);
                         if (child != null) queue.addLast(child);
@@ -128,6 +135,22 @@ public final class SkipAccessibilityService extends AccessibilityService {
             }
         } finally { while (!queue.isEmpty()) queue.removeFirst().recycle(); }
         return found;
+    }
+
+    private AccessibilityNodeInfo matchTarget(AccessibilityNodeInfo node, String pkg, Rect window,
+                                               String exactText, String exactId) {
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        boolean region = !window.isEmpty() && SkipPolicy.skipRegion(
+                (bounds.centerX() - window.left) / (float) window.width(),
+                (bounds.centerY() - window.top) / (float) window.height());
+        if (!pkg.equals(string(node.getPackageName())) || !node.isVisibleToUser() || !node.isEnabled()
+                || !SkipPolicy.matches(string(node.getText()), string(node.getContentDescription()),
+                node.getViewIdResourceName(), exactText, exactId, region)) return null;
+        AccessibilityNodeInfo target = clickTarget(node, pkg, window);
+        if (target != null && region && SkipPolicy.skipLabel(string(node.getText()), string(node.getContentDescription())))
+            candidateId = string(node.getViewIdResourceName());
+        return target;
     }
 
     private AccessibilityNodeInfo clickTarget(AccessibilityNodeInfo matched, String pkg, Rect window) {

@@ -34,6 +34,20 @@ final class Store extends SQLiteOpenHelper {
         if (!value.equals(scanStatus())) prefs.edit().putString("scanStatus", value).apply();
     }
     void active(boolean value) { prefs.edit().putBoolean("active", value).apply(); }
+    boolean autoIds() { return prefs.getBoolean("autoIds", true); }
+    void autoIds(boolean value) { prefs.edit().putBoolean("autoIds", value).apply(); }
+    String learnedId(String pkg) { return prefs.getString("learnedId:" + pkg, ""); }
+    void learnId(String pkg, String id) {
+        if (autoIds() && SkipPolicy.resourceId(pkg, id) && !id.equals(learnedId(pkg)))
+            prefs.edit().putString("learnedId:" + pkg, id).apply();
+    }
+    void forgetId(String pkg) { prefs.edit().remove("learnedId:" + pkg).apply(); }
+    boolean protection() { return prefs.getBoolean("protection", false); }
+    void protection(boolean value) { prefs.edit().putBoolean("protection", value).commit(); }
+    boolean autoStart() { return prefs.getBoolean("autoStart", false); }
+    void autoStart(boolean value) { prefs.edit().putBoolean("autoStart", value).apply(); }
+    String protectionStatus() { return prefs.getString("protectionStatus", ""); }
+    void protectionStatus(String value) { prefs.edit().putString("protectionStatus", value).apply(); }
     boolean enabled(String pkg) { return prefs.getBoolean("enabled:" + pkg, false); }
     void enable(String pkg, boolean value) { prefs.edit().putBoolean("enabled:" + pkg, value).apply(); }
     void enableAll(List<AppCatalog.Entry> apps, boolean value) {
